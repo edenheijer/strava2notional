@@ -1,16 +1,26 @@
-from notion.block import CollectionViewBlock
-from notion.client import NotionClient
+import notional
 
-from config import TOKEN_V2
-from table_schema import SCHEMA
+# from notional import Block, Page
+from notional import schema
+from notional.iterator import EndpointIterator
+from notional.records import Database, Page
+from notional.orm import connected_page
+from config import TOKEN_V2, PAGE_ID, NOTION_SECRET
+from datetime import datetime, tzinfo
+
+# from table_schema import SCHEMA
 
 
 class NotionInterface:
     def __init__(self):
-        self.token_v2 = TOKEN_V2
-        self.client = NotionClient(token_v2=self.token_v2)
-        self.strava_page_title = "Strava"
-        self.strava_table_title = "Activity Logbook"
+        self.notional = notional.connect(auth=NOTION_SECRET)
+        self.strava_page_title = "CPC"
+        self.strava_table_title = "Strava log"
+
+    def get_strava_page_by_id(self):
+        page = self.notional.pages.retrieve(PAGE_ID)
+        return page
+
 
     def get_strava_page(self):
         strava_page = None
@@ -26,38 +36,65 @@ class NotionInterface:
 
         return strava_page
 
-    def create_activity_log_table(self):
-        strava_page = self.get_strava_page()
+    def create_activity_log_table_notional(self):
+        # retrieve Strava page by ID
+        strava_page = self.get_strava_page_by_id()
 
-        # Check if we've a table already
-        for block in strava_page.children:
-            if hasattr(block, 'title') and block.title == self.strava_table_title:
+        # check if page already contains child database
+        # TODO as of current, returns first child of type child_database; refactor into more selective?
+        for block in self.notional.blocks.children.list(strava_page):
+            if hasattr(block, "type") and block.type == "child_database":
                 return block
 
-        # Create a table
-        strava_table = strava_page.children.add_new(CollectionViewBlock)
-        strava_table.collection = self.client.get_collection(
-            self.client.create_record("collection", parent=strava_table, schema=SCHEMA)
+        # define schema for Strava database
+        strava_schema = {
+            "Title": schema.Title(),
+            "Date": schema.Date(),
+            "Type": schema.Select(),
+            "Distance": schema.Number(),
+            "Duration": schema.Number(),
+            "ID": schema.Number(),
+        }
+        strava_table = self.notional.databases.create(
+            parent=strava_page, title="Strava", schema=strava_schema
         )
-        strava_table.title = self.strava_table_title
-        strava_table.views.add_new(view_type="table")
 
         return strava_table
 
-    def add_row_to_table(self, table, data):
-        # HACK - needs to happen to work!
-        table.collection.parent.views
+    def add_row_to_database(self, db: Database, data):
+        """Adds row to Strava database, returns true if row already has been added"""
+        stravaDB = self.notional.databases.retrieve(db.id)
 
-        rows = table.collection.get_rows()
-        if not any([r.name == data.name and r.date.start.date() == data.start_date_local.date() for r in rows]):
-            row = table.collection.add_row()
+        # retrieve activities to be iterated in order to check if new activities are already added
+        runs = EndpointIterator(
+            endpoint=self.notional.databases().query,
+            database_id=db.id,
+            sorts=[{"direction": "descending", "property": "Date"}],
+        )
+        
+        for run in runs:
+            current_run_date = datetime.strptime(run["properties"]["Date"]["date"]["start"], "%Y-%m-%d").replace(tzinfo=None)
 
-            row.set_property("title", data.name)
-            row.set_property("date", data.start_date_local)
-            row.set_property("type", data.type)
-            row.set_property("distance (m)", data.distance)
-            row.set_property("time (s)", data.moving_time)
-            row.set_property("cals", data.kilojoules)
-            print(f'Added {data.name} on {data.start_date_local} to Notion!')
-        else:
-            print(f'Skipping {data.name} for {data.start_date_local}')
+            current_run_title = run["properties"]["Title"]["title"][0]["plain_text"]
+            current_run_ID = run["properties"]["ID"]["number"]
+
+            if datetime.strptime(
+                run["properties"]["Date"]["date"]["start"], "%Y-%m-%d"
+            ).replace(tzinfo=None) > data.start_date_local.replace(tzinfo=None) or (current_run_ID == data.upload_id
+            ):
+                print(f"Skipped {data.name} on {data.start_date_local}; already added!")
+                return True
+        print(f"About to add run {data.name} on {data.start_date_local} with ID {data.upload_id}")
+        Run: Page = connected_page(self.notional, source_db=stravaDB)
+
+        run_record = Run.create(
+            Title=data.name if hasattr(data, "name") else "",
+            Date=data.start_date_local if hasattr(data, "start_date_local") else "",
+            Type=data.type,
+            Distance=data.distance,
+            Duration=data.moving_time,
+            ID=data.upload_id
+        )
+
+        print(f"Added {data.name} on {data.start_date_local} to Notion!")
+
