@@ -22,4 +22,3 @@ for activity in activities:
     already_added = notion.add_row_to_database(database, activity)
     if already_added:
         break
-    

@@ -21,7 +21,6 @@ class NotionInterface:
         page = self.notional.pages.retrieve(PAGE_ID)
         return page
 
-
     def get_strava_page(self):
         strava_page = None
         for page in self.client.get_top_level_pages():
@@ -71,20 +70,25 @@ class NotionInterface:
             database_id=db.id,
             sorts=[{"direction": "descending", "property": "Date"}],
         )
-        
+
         for run in runs:
-            current_run_date = datetime.strptime(run["properties"]["Date"]["date"]["start"], "%Y-%m-%d").replace(tzinfo=None)
+            current_run_date = datetime.strptime(
+                run["properties"]["Date"]["date"]["start"], "%Y-%m-%d"
+            ).replace(tzinfo=None)
 
             current_run_title = run["properties"]["Title"]["title"][0]["plain_text"]
             current_run_ID = run["properties"]["ID"]["number"]
 
             if datetime.strptime(
                 run["properties"]["Date"]["date"]["start"], "%Y-%m-%d"
-            ).replace(tzinfo=None) > data.start_date_local.replace(tzinfo=None) or (current_run_ID == data.upload_id
+            ).replace(tzinfo=None) > data.start_date_local.replace(tzinfo=None) or (
+                current_run_ID == data.upload_id
             ):
                 print(f"Skipped {data.name} on {data.start_date_local}; already added!")
                 return True
-        print(f"About to add run {data.name} on {data.start_date_local} with ID {data.upload_id}")
+        print(
+            f"About to add run {data.name} on {data.start_date_local} with ID {data.upload_id}"
+        )
         Run: Page = connected_page(self.notional, source_db=stravaDB)
 
         run_record = Run.create(
@@ -93,8 +97,7 @@ class NotionInterface:
             Type=data.type,
             Distance=data.distance,
             Duration=data.moving_time,
-            ID=data.upload_id
+            ID=data.upload_id,
         )
 
         print(f"Added {data.name} on {data.start_date_local} to Notion!")
-
