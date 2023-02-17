@@ -1,6 +1,0 @@
-# StravaIO
-CLIENT_ID = "<YOUR_ID_HERE>"
-CLIENT_SECRET = "<YOUR_ID_HERE>"
-
-# Notion
-TOKEN_V2 = "<YOUR_ID_HERE>"
