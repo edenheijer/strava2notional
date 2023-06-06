@@ -61,6 +61,12 @@ class NotionInterface:
         )
         params = {
              "database_id": id,
+             "sorts": [
+                {
+                    "property": "Date",
+                    "direction": "descending"
+                }
+             ]
         }
         for run in runs(**params):
             current_run_date = run.properties["Date"].date.start
