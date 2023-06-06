@@ -3,10 +3,10 @@ import notional
 # from notional import Block, Page
 from notional import schema
 from notional.iterator import EndpointIterator
-from notional.records import Page
+from notional.blocks import Page
 from notional.orm import connected_page
 from config import PAGE_ID, NOTION_SECRET
-from datetime import datetime
+# from datetime import datetime
 
 # from table_schema import SCHEMA
 
@@ -57,17 +57,15 @@ class NotionInterface:
         # retrieve activities to be iterated in order to check
         # if new activities are already added
         runs = EndpointIterator(
-            endpoint=self.notional.databases().query,
-            database_id=id,
-            sorts=[{"direction": "descending", "property": "Date"}],
+            endpoint=self.notional.databases().query
         )
+        params = {
+             "database_id": id,
+        }
+        for run in runs(**params):
+            current_run_date = run.properties["Date"].date.start
 
-        for run in runs:
-            current_run_date = datetime.strptime(
-                run["properties"]["Date"]["date"]["start"], "%Y-%m-%d"
-            ).replace(tzinfo=None)
-
-            current_run_ID = run["properties"]["ID"]["number"]
+            current_run_ID = run.properties["ID"].number
 
             if current_run_ID == data.upload_id:
                 print(
